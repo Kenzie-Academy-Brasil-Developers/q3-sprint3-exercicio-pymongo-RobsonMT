@@ -1,18 +1,16 @@
 from flask import Flask, request, jsonify
 import pymongo
-from dotenv import load_dotenv
+from pymongo import MongoClient
 from os import getenv
 
-load_dotenv()
 
 app = Flask(__name__)
-# Faça a conexã com o MongoDB.
+client = MongoClient("mongodb://localhost:27017/")
 
 # Métodos auxiliares
 
 class Product:
-    # Crie um atributo de classe que pegue a variável de ambiente DATABASE e crie/acesse o banco de dados.
-    # Utilize essa variável em seus métodos.
+    DATABASE = client[getenv('DATABASE')]
     
     def __init__(self, name, price, in_stock) -> None:
         self.name = name
@@ -20,30 +18,48 @@ class Product:
         self.in_stock = in_stock
 
     def register_product(self):
-        # Desenvolva aqui a lógica para inserir um dado no banco.
-        pass
+        db = self.DATABASE
+
+        db.product.insert_one(self.__dict__)
 
     @classmethod
     def all_products(cls):
-        # Desenvolva aqui a lógica para capturar todos os dados do banco.
-        # Observem o erro você pode ter a necessidade de deletar um dado onde retorne um valor inválido para o flask.
-        pass
+        db = cls.DATABASE
+
+        all_posts = []
+        for p in db.product.find():
+            del p['_id']
+            all_posts.append(p)
+
+        return all_posts
 
     @classmethod
     def product_by_name(cls, name):
-        # Desenvolva aqui a lógica para capturar um dado específico pelo "name".
-        # Observem o erro você pode ter a necessidade de deletar um dado onde retorne um valor inválido para o flask.
-        pass
+        db = cls.DATABASE
+
+        product = db.product.find_one({'name': name})
+        del product['_id']
+
+        return product
 
     @classmethod
     def updated_product(cls, name, data_updated):
-        # Desenvolva aqui a lógica para fazer a atualização dos dados, identificando qual dado deve ser utilizado e assim atualiza-lo.
-        pass
+        db = cls.DATABASE
+
+        current_product = cls.product_by_name(name)
+        
+        update = {"$set": {**data_updated}}
+
+        db.product.update_one(current_product, update)
 
     @classmethod
     def delete_product(cls, name):
-        # Por fim desenvolva aqui a lógica para fazer a deleção do dado a partir do "name".
-        pass
+        db = cls.DATABASE
+
+        current_product = cls.product_by_name(name)
+
+        db.product.delete_one(current_product)
+
 
 # Rotas
 
@@ -51,30 +67,29 @@ class Product:
 def register():
     req = request.get_json()
 
-    # Utilize sua classe Product para criar e registrar o produto.
+    product = Product(**req)
+    product.register_product()
 
     return {'msg': 'created'}, 201
 
 @app.get('/products')
 def get_all():
-    # Utilize sua classe para retornar todos os dados do seu banco de dados.
-    pass
+    return jsonify(Product.all_products()), 200
 
 @app.get('/products/<product_name>')
 def get_by_name(product_name):
-    # Utilize sua classe para retornar um dado específico do seu banco de dados pelo "name".
-    pass
+    return jsonify(Product.product_by_name(product_name)), 200
 
 @app.patch('/products/<product_name>')
 def update(product_name):
     req = request.get_json()
 
-    # Utilize o método da sua classe para fazer a operação de atualizar os dados, passando seus respectivos parâmetros.
+    Product.updated_product(product_name, req)
 
     return {}, 204
 
 @app.delete('/products/<product_name>')
 def delete(product_name):
-    # Utilize o método da sua classe para fazer a operação de deletar os dados, passando seu respectivo parâmetro.
+    Product.delete_product(product_name)
 
     return {}, 204
